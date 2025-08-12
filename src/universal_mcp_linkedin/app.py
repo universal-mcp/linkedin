@@ -1,23 +1,107 @@
 from universal_mcp.applications import APIApplication
 from universal_mcp.integrations import Integration
+from typing import Any
 
 class LinkedinApp(APIApplication):
     """
     Base class for Universal MCP Applications.
     """
-    def __init__(self, integration: Integration = None, **kwargs) -> None:
+    def __init__(self, integration: Integration | None = None, **kwargs) -> None:
         super().__init__(name="linkedin", integration=integration, **kwargs)
+        self.base_url="https://api.linkedin.com"
 
-    def run(self):
+    def _get_headers(self):
+        if not self.integration:
+            raise ValueError("Integration not found")
+        credentials = self.integration.get_credentials()
+        if "headers" in credentials:
+            return credentials["headers"]
+        return {
+            "Authorization": f"Bearer {credentials['access_token']}",
+            "X-Restli-Protocol-Version": "2.0.0",
+            "Content-Type": "application/json",
+            "LinkedIn-Version": "202507"
+        }
+
+    def create_post(
+        self,
+        commentary: str,
+        author: str,
+        visibility: str = "PUBLIC",
+        distribution: dict[str, Any] | None = None,
+        lifecycle_state: str = "PUBLISHED",
+        is_reshare_disabled: bool = False,
+    ) -> dict[str, str]:
         """
-        Example tool implementation.
+        Create a post on LinkedIn.
+
+        Args:
+            commentary (str): The user generated commentary for the post. Supports mentions using format "@[Entity Name](urn:li:organization:123456)" and hashtags using "#keyword". Text linking to annotated entities must match the name exactly (case sensitive). For member mentions, partial name matching is supported.
+            
+            author (str): The URN of the author creating the post. Use "urn:li:person:{id}" for individual posts or "urn:li:organization:{id}" for company page posts. Example: "urn:li:person:wGgGaX_xbB" or "urn:li:organization:2414183"
+            
+            visibility (str): Controls who can view the post. Use "PUBLIC" for posts viewable by anyone on LinkedIn or "CONNECTIONS" for posts viewable by 1st-degree connections only. Defaults to "PUBLIC".
+            
+            distribution (dict[str, Any], optional): Distribution settings for the post. If not provided, defaults to {"feedDistribution": "MAIN_FEED", "targetEntities": [], "thirdPartyDistributionChannels": []}. feedDistribution controls where the post appears in feeds, targetEntities specifies entities to target, and thirdPartyDistributionChannels defines external distribution channels.
+            
+            lifecycle_state (str): The state of the post. Use "PUBLISHED" for live posts accessible to all entities, "DRAFT" for posts accessible only to author, "PUBLISH_REQUESTED" for posts submitted but processing, or "PUBLISH_FAILED" for posts that failed to publish. Defaults to "PUBLISHED".
+            
+            is_reshare_disabled (bool): Whether resharing is disabled by the author. Set to True to prevent other users from resharing this post, or False to allow resharing. Defaults to False.
+
+        Returns:
+            dict[str, str]: Dictionary containing the post ID with key "post_id". Example: {"post_id": "urn:li:share:6844785523593134080"}
+
+        Raises:
+            ValueError: If required parameters (commentary, author) are missing or if x-restli-id header is not found
+            HTTPStatusError: Raised when the API request fails with detailed error information including status code and response body
+
+        Notes:
+            Requires LinkedIn API permissions: w_member_social (for individual posts) or w_organization_social (for company posts). All requests require headers: X-Restli-Protocol-Version: 2.0.0 and LinkedIn-Version: 202507. Rate limits: 150 requests per day per member, 100,000 requests per day per application. The Posts API replaces the deprecated ugcPosts API.
+
+        Tags:
+            posts, important
         """
-        print(f"Running the main task for {self.name}...")
-        print("Hello from LinkedinApp!")
-        return "Task completed successfully."
+        if commentary is None:
+            raise ValueError("Missing required parameter 'commentary'.")
+        if author is None:
+            raise ValueError("Missing required parameter 'author'.")
+        
+        # Set default distribution if not provided
+        if distribution is None:
+            distribution = {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": []
+            }
+        
+        request_body_data = {
+            "author": author,
+            "commentary": commentary,
+            "visibility": visibility,
+            "distribution": distribution,
+            "lifecycleState": lifecycle_state,
+            "isReshareDisabledByAuthor": is_reshare_disabled,
+        }
+        
+        url = f"{self.base_url}/rest/posts"
+        query_params = {}
+        
+        response = self._post(
+            url,
+            data=request_body_data,
+            params=query_params,
+        )
+        
+        self._handle_response(response)
+        
+        post_id = response.headers.get("x-restli-id")
+        if not post_id:
+            raise ValueError("x-restli-id header not found in response")
+        
+        return {"post_id": post_id, "post_url": f"https://www.linkedin.com/feed/update/{post_id}"}
 
     def list_tools(self):
         """
         Lists the available tools (methods) for this application.
         """
-        return [self.run]
+        return [self.create_post]
