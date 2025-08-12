@@ -150,10 +150,81 @@ class LinkedinApp(APIApplication):
             return {"status": "deleted", "post_urn": post_urn}
         else:
             return self._handle_response(response)
-            
+
+    def update_post(
+        self,
+        post_urn: str,
+        commentary: str | None = None,
+        content_call_to_action_label: str | None = None,
+        content_landing_page: str | None = None,
+        lifecycle_state: str | None = None,
+        ad_context_name: str | None = None,
+        ad_context_status: str | None = None,
+    ) -> dict[str, str]:
+        """
+        Update a post on LinkedIn.
+
+        Args:
+            post_urn (str): The URN of the post to update. Can be either a ugcPostUrn (urn:li:ugcPost:{id}) or shareUrn (urn:li:share:{id}).
+            commentary (str | None, optional): The user generated commentary of this post in little format.
+            content_call_to_action_label (str | None, optional): The call to action label that a member can act on that opens a landing page.
+            content_landing_page (str | None, optional): URL of the landing page.
+            lifecycle_state (str | None, optional): The state of the content. Can be DRAFT, PUBLISHED, PUBLISH_REQUESTED, or PUBLISH_FAILED.
+            ad_context_name (str | None, optional): Update the name of the sponsored content.
+            ad_context_status (str | None, optional): Update the status of the sponsored content.
+
+        Returns:
+            dict[str, str]: Dictionary containing the update status. Example: {"status": "updated", "post_urn": "urn:li:share:6844785523593134080"}
+
+        Raises:
+            ValueError: If required parameter (post_urn) is missing or if integration is not found
+            HTTPStatusError: Raised when the API request fails with detailed error information including status code and response body
+
+     
+
+
+        Tags:
+            posts, update, important
+        """
+        url = f"{self.base_url}/rest/posts/{quote(post_urn, safe='')}"
+        query_params = {}
+        
+        # Build the patch data
+        patch_data = {"$set": {}}
+        ad_context_data = {}
+        
+        if commentary is not None:
+            patch_data["$set"]["commentary"] = commentary
+        if content_call_to_action_label is not None:
+            patch_data["$set"]["contentCallToActionLabel"] = content_call_to_action_label
+        if content_landing_page is not None:
+            patch_data["$set"]["contentLandingPage"] = content_landing_page
+        if lifecycle_state is not None:
+            patch_data["$set"]["lifecycleState"] = lifecycle_state
+        
+        if ad_context_name is not None or ad_context_status is not None:
+            ad_context_data["$set"] = {}
+            if ad_context_name is not None:
+                ad_context_data["$set"]["dscName"] = ad_context_name
+            if ad_context_status is not None:
+                ad_context_data["$set"]["dscStatus"] = ad_context_status
+            patch_data["adContext"] = ad_context_data
+        
+        request_body_data = {"patch": patch_data}
+        
+        response = self._post(
+            url,
+            data=request_body_data,
+            params=query_params,
+        )
+        
+        if response.status_code == 204:
+            return {"status": "updated", "post_urn": post_urn}
+        else:
+            return self._handle_response(response)
 
     def list_tools(self):
         """
         Lists the available tools (methods) for this application.
         """
-        return [self.create_post, self.get_your_info, self.delete_post]
+        return [self.create_post, self.get_your_info, self.delete_post, self.update_post]
