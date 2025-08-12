@@ -1,6 +1,7 @@
 from universal_mcp.applications import APIApplication
 from universal_mcp.integrations import Integration
 from typing import Any
+from urllib.parse import quote
 
 class LinkedinApp(APIApplication):
     """
@@ -61,11 +62,6 @@ class LinkedinApp(APIApplication):
         Tags:
             posts, important
         """
-        if commentary is None:
-            raise ValueError("Missing required parameter 'commentary'.")
-        if author is None:
-            raise ValueError("Missing required parameter 'author'.")
-        
         # Set default distribution if not provided
         if distribution is None:
             distribution = {
@@ -98,10 +94,66 @@ class LinkedinApp(APIApplication):
         if not post_id:
             raise ValueError("x-restli-id header not found in response")
         
-        return {"post_id": post_id, "post_url": f"https://www.linkedin.com/feed/update/{post_id}"}
+        return {"post_urn": post_id, "post_url": f"https://www.linkedin.com/feed/update/{post_id}"}
+
+    def get_your_info(self) -> dict[str, Any]:
+        """
+        Get your LinkedIn profile information.
+
+        Returns:
+            dict[str, Any]: Dictionary containing your LinkedIn profile information.
+
+        Raises:
+            ValueError: If integration is not found
+            HTTPStatusError: Raised when the API request fails with detailed error information including status code and response body
+
+        Tags:
+            profile, info
+        """
+        url = f"{self.base_url}/v2/userinfo"
+        query_params = {}
+        
+        response = self._get(
+            url,
+            params=query_params,
+        )
+        
+        return self._handle_response(response)
+
+    def delete_post(self, post_urn: str) -> dict[str, str]:
+        """
+        Delete a post on LinkedIn.
+
+        Args:
+            post_urn (str): The URN of the post to delete. Can be either a ugcPostUrn (urn:li:ugcPost:{id}) or shareUrn (urn:li:share:{id}).
+
+        Returns:
+            dict[str, str]: Dictionary containing the deletion status. Example: {"status": "deleted", "post_urn": "urn:li:share:6844785523593134080"}
+
+        Raises:
+            ValueError: If required parameter (post_urn) is missing or if integration is not found
+            HTTPStatusError: Raised when the API request fails with detailed error information including status code and response body
+
+        
+        Tags:
+            posts, important
+        """
+        url = f"{self.base_url}/rest/posts/{quote(post_urn, safe='')}"
+        query_params = {}
+        
+        response = self._delete(
+            url,
+            params=query_params,
+        )
+        
+        if response.status_code == 204:
+            return {"status": "deleted", "post_urn": post_urn}
+        else:
+            return self._handle_response(response)
+            
 
     def list_tools(self):
         """
         Lists the available tools (methods) for this application.
         """
-        return [self.create_post]
+        return [self.create_post, self.get_your_info, self.delete_post]
